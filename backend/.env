@@ -1,0 +1,37 @@
+RapidAssist
+│
+├── config
+│   └── db.js
+│
+├── models
+│   ├── User.js
+│   ├── Worker.js
+│   ├── Booking.js
+│   ├── Review.js
+│   ├── Complaint.js
+│   ├── Notification.js
+│
+├── controllers
+│   ├── authController.js
+│   ├── userController.js
+│   ├── workerController.js
+│   ├── bookingController.js
+│   ├── reviewController.js
+│   ├── complaintController.js
+│
+├── routes
+│   ├── authRoutes.js
+│   ├── userRoutes.js
+│   ├── workerRoutes.js
+│   ├── bookingRoutes.js
+│   ├── reviewRoutes.js
+│   ├── complaintRoutes.js
+│
+├── middlewares
+│   ├── authMiddleware.js
+│   ├── roleMiddleware.js
+│   ├── errorMiddleware.js
+│   └── validationMiddleware.js
+│
+├── server.js
+└── package.json
