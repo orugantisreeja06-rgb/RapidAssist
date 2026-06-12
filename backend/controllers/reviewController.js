@@ -1,18 +1,9 @@
-// ============================================================
-//  Worker Connect — reviewController.js
-//  Handles review lifecycle and worker rating aggregation
-// ============================================================
 
 const asyncHandler = require("express-async-handler");
 const Review       = require("../models/Review");
 const Worker       = require("../models/Worker");
 const Booking      = require("../models/Booking");
 
-// ─────────────────────────────────────────────
-//  Helper: recalculate and persist a worker's
-//  averageRating and totalReviews after any
-//  create / update / delete operation.
-// ─────────────────────────────────────────────
 const recalculateWorkerRating = async (workerId) => {
   const stats = await Review.aggregate([
     { $match: { worker: workerId } },
@@ -31,7 +22,6 @@ const recalculateWorkerRating = async (workerId) => {
       totalReviews:  stats[0].totalReviews,
     });
   } else {
-    // All reviews deleted — reset to defaults
     await Worker.findByIdAndUpdate(workerId, {
       averageRating: 0,
       totalReviews:  0,
@@ -39,38 +29,26 @@ const recalculateWorkerRating = async (workerId) => {
   }
 };
 
-// ============================================================
-//  1. addReview
-//     POST /api/reviews
-//     A customer can leave a review only after their booking
-//     with the worker has been marked "Completed".
-//     One review per completed booking is enforced.
-// ============================================================
 const addReview = asyncHandler(async (req, res) => {
   const { workerId, bookingId, rating, comment } = req.body;
 
-  // --- Validate required fields ---
   if (!workerId || !bookingId || !rating) {
     res.status(400);
     throw new Error("workerId, bookingId, and rating are required.");
   }
 
-  // --- Rating must be an integer between 1 and 5 ---
   const parsedRating = Number(rating);
   if (!Number.isInteger(parsedRating) || parsedRating < 1 || parsedRating > 5) {
     res.status(400);
     throw new Error("Rating must be a whole number between 1 and 5.");
   }
 
-  // --- Verify worker exists ---
   const worker = await Worker.findById(workerId);
   if (!worker) {
     res.status(404);
     throw new Error("Worker not found.");
   }
 
-  // --- Verify the booking exists, belongs to this user,
-  //     is linked to this worker, and is Completed ---
   const booking = await Booking.findOne({
     _id:    bookingId,
     user:   req.user.id,
@@ -90,8 +68,6 @@ const addReview = asyncHandler(async (req, res) => {
       "You can only review a worker after the booking has been completed."
     );
   }
-
-  // --- One review per booking (idempotency guard) ---
   const existingReview = await Review.findOne({ booking: bookingId, user: req.user.id });
   if (existingReview) {
     res.status(409);
@@ -100,7 +76,6 @@ const addReview = asyncHandler(async (req, res) => {
     );
   }
 
-  // --- Create the review ---
   const review = await Review.create({
     user:    req.user.id,
     worker:  workerId,
@@ -109,7 +84,6 @@ const addReview = asyncHandler(async (req, res) => {
     comment: comment?.trim() || "",
   });
 
-  // --- Recalculate worker rating ---
   await recalculateWorkerRating(worker._id);
 
   const populated = await review.populate([
@@ -124,20 +98,9 @@ const addReview = asyncHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-//  2. getWorkerReviews
-//     GET /api/reviews/worker/:workerId
-//     Public — returns all reviews for a given worker,
-//     newest first, with pagination.
-//
-//     Query params:
-//       page  — default 1
-//       limit — default 10, max 50
-// ============================================================
 const getWorkerReviews = asyncHandler(async (req, res) => {
   const { workerId } = req.params;
 
-  // --- Verify worker exists ---
   const worker = await Worker.findById(workerId).select(
     "name averageRating totalReviews"
   );
@@ -174,13 +137,6 @@ const getWorkerReviews = asyncHandler(async (req, res) => {
     reviews,
   });
 });
-
-// ============================================================
-//  3. updateReview
-//     PUT /api/reviews/:id
-//     Authenticated user may update only their own review.
-//     Both rating and comment are updatable.
-// ============================================================
 const updateReview = asyncHandler(async (req, res) => {
   const review = await Review.findById(req.params.id);
 
@@ -189,7 +145,6 @@ const updateReview = asyncHandler(async (req, res) => {
     throw new Error("Review not found.");
   }
 
-  // --- Only the review author may edit it ---
   if (review.user.toString() !== req.user.id) {
     res.status(403);
     throw new Error("You are not authorized to update this review.");
@@ -197,13 +152,11 @@ const updateReview = asyncHandler(async (req, res) => {
 
   const { rating, comment } = req.body;
 
-  // --- At least one field must be provided ---
   if (rating === undefined && comment === undefined) {
     res.status(400);
     throw new Error("Provide at least one of: rating, comment.");
   }
 
-  // --- Validate new rating if supplied ---
   if (rating !== undefined) {
     const parsedRating = Number(rating);
     if (!Number.isInteger(parsedRating) || parsedRating < 1 || parsedRating > 5) {
@@ -220,7 +173,6 @@ const updateReview = asyncHandler(async (req, res) => {
   review.updatedAt = new Date();
   await review.save();
 
-  // --- Recalculate worker rating ---
   await recalculateWorkerRating(review.worker);
 
   const populated = await review.populate({ path: "user", select: "name email" });
@@ -232,12 +184,6 @@ const updateReview = asyncHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-//  4. deleteReview
-//     DELETE /api/reviews/:id
-//     Authenticated user may delete only their own review.
-//     Worker's averageRating is recalculated after deletion.
-// ============================================================
 const deleteReview = asyncHandler(async (req, res) => {
   const review = await Review.findById(req.params.id);
 
@@ -246,7 +192,6 @@ const deleteReview = asyncHandler(async (req, res) => {
     throw new Error("Review not found.");
   }
 
-  // --- Only the review author (or admin) may delete it ---
   const isOwner = review.user.toString() === req.user.id;
   const isAdmin = req.user.role          === "admin";
 
@@ -259,7 +204,6 @@ const deleteReview = asyncHandler(async (req, res) => {
 
   await review.deleteOne();
 
-  // --- Recalculate worker rating after removal ---
   await recalculateWorkerRating(workerId);
 
   res.status(200).json({
@@ -268,16 +212,9 @@ const deleteReview = asyncHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-//  5. getAverageRating
-//     GET /api/reviews/worker/:workerId/average
-//     Public — returns the live aggregated average rating
-//     and review breakdown (star distribution) for a worker.
-// ============================================================
 const getAverageRating = asyncHandler(async (req, res) => {
   const { workerId } = req.params;
 
-  // --- Verify worker exists ---
   const worker = await Worker.findById(workerId).select(
     "name averageRating totalReviews"
   );
@@ -286,7 +223,6 @@ const getAverageRating = asyncHandler(async (req, res) => {
     throw new Error("Worker not found.");
   }
 
-  // --- Live aggregation (source of truth) ---
   const aggregation = await Review.aggregate([
     { $match: { worker: worker._id } },
     {
@@ -294,7 +230,6 @@ const getAverageRating = asyncHandler(async (req, res) => {
         _id:           "$worker",
         averageRating: { $avg: "$rating" },
         totalReviews:  { $sum: 1 },
-        // Star distribution
         fiveStar:      { $sum: { $cond: [{ $eq: ["$rating", 5] }, 1, 0] } },
         fourStar:      { $sum: { $cond: [{ $eq: ["$rating", 4] }, 1, 0] } },
         threeStar:     { $sum: { $cond: [{ $eq: ["$rating", 3] }, 1, 0] } },
@@ -332,10 +267,6 @@ const getAverageRating = asyncHandler(async (req, res) => {
     },
   });
 });
-
-// ============================================================
-//  Exports
-// ============================================================
 module.exports = {
   addReview,
   getWorkerReviews,
