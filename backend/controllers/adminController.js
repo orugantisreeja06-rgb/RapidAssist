@@ -1,8 +1,3 @@
-// ============================================================
-//  Worker Connect — adminController.js
-//  Admin-only operations: dashboard, user/worker management,
-//  complaint oversight, and analytics reports
-// ============================================================
 
 const asyncHandler = require("express-async-handler");
 const User         = require("../models/User");
@@ -11,9 +6,6 @@ const Booking      = require("../models/Booking");
 const Complaint    = require("../models/Complaint");
 const Review       = require("../models/Review");
 
-// ─────────────────────────────────────────────
-//  Helper: parse and clamp pagination params
-// ─────────────────────────────────────────────
 const getPagination = (query) => {
   const page  = Math.max(1, parseInt(query.page)  || 1);
   const limit = Math.min(100, parseInt(query.limit) || 20);
@@ -21,14 +13,6 @@ const getPagination = (query) => {
   return { page, limit, skip };
 };
 
-// ============================================================
-//  1. getDashboardStats
-//     GET /api/admin/dashboard
-//     Returns a high-level snapshot of platform health:
-//     total users, workers, bookings, completed bookings,
-//     pending complaints, and a recent-activity summary.
-//     All counts are fetched in a single Promise.all round-trip.
-// ============================================================
 const getDashboardStats = asyncHandler(async (req, res) => {
   const [
     totalUsers,
@@ -56,14 +40,12 @@ const getDashboardStats = asyncHandler(async (req, res) => {
       { $group: { _id: null, total: { $sum: "$totalAmount" } } },
     ]),
 
-    // Last 5 bookings for activity feed
     Booking.find()
       .sort({ createdAt: -1 })
       .limit(5)
       .populate({ path: "user",   select: "name email" })
       .populate({ path: "worker", select: "name"       }),
-
-    // Last 5 registered users
+    
     User.find()
       .sort({ createdAt: -1 })
       .limit(5)
@@ -90,16 +72,6 @@ const getDashboardStats = asyncHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-//  2. getAllUsers
-//     GET /api/admin/users
-//     Returns all customer accounts with pagination and
-//     optional search by name or email.
-//
-//     Query params:
-//       search — partial name or email match
-//       page / limit
-// ============================================================
 const getAllUsers = asyncHandler(async (req, res) => {
   const { search }            = req.query;
   const { page, limit, skip } = getPagination(req.query);
@@ -129,18 +101,6 @@ const getAllUsers = asyncHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-//  3. getAllWorkers
-//     GET /api/admin/workers
-//     Returns all worker accounts with pagination.
-//     Optional filters: isVerified, skill, search.
-//
-//     Query params:
-//       isVerified — "true" | "false"
-//       skill      — partial skill match
-//       search     — partial name or email match
-//       page / limit
-// ============================================================
 const getAllWorkers = asyncHandler(async (req, res) => {
   const { search, isVerified, skill } = req.query;
   const { page, limit, skip }         = getPagination(req.query);
@@ -177,14 +137,6 @@ const getAllWorkers = asyncHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-//  4. verifyWorker
-//     PATCH /api/admin/workers/:id/verify
-//     Approves or revokes a worker's verified status.
-//     Records which admin performed the action and when.
-//
-//     Body: { isVerified: Boolean, verificationNote?: String }
-// ============================================================
 const verifyWorker = asyncHandler(async (req, res) => {
   const { isVerified, verificationNote } = req.body;
 
@@ -222,12 +174,6 @@ const verifyWorker = asyncHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-//  5. deleteUser
-//     DELETE /api/admin/users/:id
-//     Permanently removes a customer account.
-//     Prevents deletion of admin accounts via this endpoint.
-// ============================================================
 const deleteUser = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
 
@@ -236,13 +182,11 @@ const deleteUser = asyncHandler(async (req, res) => {
     throw new Error("User not found.");
   }
 
-  // --- Guard: never allow admin self-deletion or admin removal here ---
   if (user.role === "admin") {
     res.status(403);
     throw new Error("Admin accounts cannot be deleted through this endpoint.");
   }
 
-  // --- Prevent deletion if user has active bookings ---
   const activeBookings = await Booking.countDocuments({
     user:   user._id,
     status: { $in: ["Pending", "Accepted", "In Progress"] },
@@ -262,12 +206,6 @@ const deleteUser = asyncHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-//  6. deleteWorker
-//     DELETE /api/admin/workers/:id
-//     Permanently removes a worker account.
-//     Blocked if the worker has active bookings.
-// ============================================================
 const deleteWorker = asyncHandler(async (req, res) => {
   const worker = await Worker.findById(req.params.id);
 
@@ -276,7 +214,6 @@ const deleteWorker = asyncHandler(async (req, res) => {
     throw new Error("Worker not found.");
   }
 
-  // --- Prevent deletion if worker has active bookings ---
   const activeBookings = await Booking.countDocuments({
     worker: worker._id,
     status: { $in: ["Pending", "Accepted", "In Progress"] },
@@ -296,16 +233,6 @@ const deleteWorker = asyncHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-//  7. getAllComplaints
-//     GET /api/admin/complaints
-//     Returns all complaints with full complainant and target
-//     details. Supports filtering by status and pagination.
-//
-//     Query params:
-//       status — Pending | Under Review | Resolved | Rejected
-//       page / limit
-// ============================================================
 const getAllComplaints = asyncHandler(async (req, res) => {
   const { status }            = req.query;
   const { page, limit, skip } = getPagination(req.query);
@@ -332,7 +259,6 @@ const getAllComplaints = asyncHandler(async (req, res) => {
     Complaint.countDocuments(filter),
   ]);
 
-  // --- Status breakdown counts ---
   const statusBreakdown = await Complaint.aggregate([
     { $group: { _id: "$status", count: { $sum: 1 } } },
   ]);
@@ -354,16 +280,6 @@ const getAllComplaints = asyncHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-//  8. getReports
-//     GET /api/admin/reports
-//     Analytics report built entirely from aggregation pipelines.
-//     Returns:
-//       - mostBookedServices   (top 5 service types)
-//       - topRatedWorkers      (top 10 by averageRating)
-//       - complaintStatistics  (by type and by status)
-//       - monthlyBookingCount  (last 12 months)
-// ============================================================
 const getReports = asyncHandler(async (req, res) => {
   const twelveMonthsAgo = new Date();
   twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
@@ -380,7 +296,6 @@ const getReports = asyncHandler(async (req, res) => {
     averageBookingValue,
   ] = await Promise.all([
 
-    // ── Most booked service types (top 5) ──────────────────
     Booking.aggregate([
       { $group: { _id: "$serviceType", totalBookings: { $sum: 1 } } },
       { $sort:  { totalBookings: -1 } },
@@ -388,26 +303,22 @@ const getReports = asyncHandler(async (req, res) => {
       { $project: { _id: 0, serviceType: "$_id", totalBookings: 1 } },
     ]),
 
-    // ── Top 10 rated workers ───────────────────────────────
     Worker.find({ isVerified: true, totalReviews: { $gte: 1 } })
       .sort({ averageRating: -1, totalReviews: -1 })
       .limit(10)
       .select("name skills averageRating totalReviews serviceCharges location"),
 
-    // ── Complaints grouped by type ─────────────────────────
     Complaint.aggregate([
       { $group: { _id: "$complaintType", count: { $sum: 1 } } },
       { $sort:  { count: -1 } },
       { $project: { _id: 0, complaintType: "$_id", count: 1 } },
     ]),
 
-    // ── Complaints grouped by status ──────────────────────
     Complaint.aggregate([
       { $group: { _id: "$status", count: { $sum: 1 } } },
       { $project: { _id: 0, status: "$_id", count: 1 } },
     ]),
 
-    // ── Monthly booking count (last 12 months) ────────────
     Booking.aggregate([
       { $match: { createdAt: { $gte: twelveMonthsAgo } } },
       {
@@ -434,13 +345,11 @@ const getReports = asyncHandler(async (req, res) => {
       },
     ]),
 
-    // ── Overall booking status distribution ───────────────
     Booking.aggregate([
       { $group: { _id: "$status", count: { $sum: 1 } } },
       { $project: { _id: 0, status: "$_id", count: 1 } },
     ]),
 
-    // ── Average booking value (completed bookings) ─────────
     Booking.aggregate([
       { $match: { status: "Completed", totalAmount: { $gt: 0 } } },
       { $group: { _id: null, average: { $avg: "$totalAmount" } } },
@@ -466,9 +375,6 @@ const getReports = asyncHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-//  Exports
-// ============================================================
 module.exports = {
   getDashboardStats,
   getAllUsers,
