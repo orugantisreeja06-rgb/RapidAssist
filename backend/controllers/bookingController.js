@@ -1,7 +1,3 @@
-// ============================================================
-//  Worker Connect — bookingController.js
-//  Handles all booking lifecycle operations
-// ============================================================
 
 const asyncHandler   = require("express-async-handler");
 const Booking        = require("../models/Booking");
@@ -9,9 +5,6 @@ const Worker         = require("../models/Worker");
 const User           = require("../models/User");
 const Notification   = require("../models/Notification");
 
-// ─────────────────────────────────────────────
-//  Constants
-// ─────────────────────────────────────────────
 const BOOKING_STATUS = Object.freeze({
   PENDING:     "Pending",
   ACCEPTED:    "Accepted",
@@ -19,8 +12,6 @@ const BOOKING_STATUS = Object.freeze({
   COMPLETED:   "Completed",
   CANCELLED:   "Cancelled",
 });
-
-// Valid transitions a worker is permitted to make
 const WORKER_ALLOWED_TRANSITIONS = Object.freeze({
   [BOOKING_STATUS.PENDING]:     [BOOKING_STATUS.ACCEPTED, BOOKING_STATUS.CANCELLED],
   [BOOKING_STATUS.ACCEPTED]:    [BOOKING_STATUS.IN_PROGRESS, BOOKING_STATUS.CANCELLED],
@@ -29,37 +20,24 @@ const WORKER_ALLOWED_TRANSITIONS = Object.freeze({
   [BOOKING_STATUS.CANCELLED]:   [],
 });
 
-// ─────────────────────────────────────────────
-//  Helper: create an in-app notification
-// ─────────────────────────────────────────────
 const createNotification = async ({ recipient, recipientModel, title, message, bookingId }) => {
   try {
     await Notification.create({
       recipient,
-      recipientModel, // "User" | "Worker"
+      recipientModel,
       title,
       message,
       booking: bookingId,
       isRead:  false,
     });
   } catch (err) {
-    // Notification failure must never break the main flow
     console.error("[Notification Error]", err.message);
   }
 };
 
-// ─────────────────────────────────────────────
-//  Helper: shared populate config
-// ─────────────────────────────────────────────
 const POPULATE_USER   = { path: "user",   select: "name email phone"                                        };
 const POPULATE_WORKER = { path: "worker", select: "name email phone skills serviceCharges location averageRating" };
 
-// ============================================================
-//  1. createBooking
-//     POST /api/bookings
-//     Authenticated user creates a new service booking.
-//     A notification is fired to the assigned worker.
-// ============================================================
 const createBooking = asyncHandler(async (req, res) => {
   const {
     workerId,
@@ -70,7 +48,6 @@ const createBooking = asyncHandler(async (req, res) => {
     totalAmount,
   } = req.body;
 
-  // --- Validate required fields ---
   if (!workerId || !serviceType || !bookingDate || !address) {
     res.status(400);
     throw new Error(
@@ -78,7 +55,6 @@ const createBooking = asyncHandler(async (req, res) => {
     );
   }
 
-  // --- Verify worker exists and is active ---
   const worker = await Worker.findById(workerId);
   if (!worker) {
     res.status(404);
@@ -93,7 +69,6 @@ const createBooking = asyncHandler(async (req, res) => {
     throw new Error("This worker is currently unavailable. Please choose another worker.");
   }
 
-  // --- Prevent duplicate pending/accepted bookings with the same worker ---
   const duplicate = await Booking.findOne({
     user:    req.user.id,
     worker:  workerId,
@@ -106,7 +81,6 @@ const createBooking = asyncHandler(async (req, res) => {
     );
   }
 
-  // --- Create booking ---
   const booking = await Booking.create({
     user:             req.user.id,
     worker:           workerId,
@@ -119,7 +93,6 @@ const createBooking = asyncHandler(async (req, res) => {
     totalAmount:      totalAmount || worker.serviceCharges || 0,
   });
 
-  // --- Notify worker ---
   await createNotification({
     recipient:      workerId,
     recipientModel: "Worker",
@@ -137,13 +110,6 @@ const createBooking = asyncHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-//  2. getBookingDetails
-//     GET /api/bookings/:id
-//     Returns a single booking with full user and worker data.
-//     Accessible by the booking's owner, the assigned worker,
-//     or an admin.
-// ============================================================
 const getBookingDetails = asyncHandler(async (req, res) => {
   const booking = await Booking.findById(req.params.id)
     .populate(POPULATE_USER)
@@ -154,7 +120,6 @@ const getBookingDetails = asyncHandler(async (req, res) => {
     throw new Error("Booking not found.");
   }
 
-  // --- Authorization: only owner, assigned worker, or admin ---
   const isOwner  = booking.user?._id.toString()   === req.user.id;
   const isWorker = booking.worker?._id.toString()  === req.user.id;
   const isAdmin  = req.user.role                   === "admin";
@@ -170,17 +135,6 @@ const getBookingDetails = asyncHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-//  3. getUserBookings
-//     GET /api/bookings/my-bookings
-//     Returns all bookings placed by the logged-in customer,
-//     newest first with optional status filter.
-//
-//     Query params:
-//       status — filter by a specific status value
-//       page   — default 1
-//       limit  — default 10
-// ============================================================
 const getUserBookings = asyncHandler(async (req, res) => {
   const { status }  = req.query;
   const page        = Math.max(1, parseInt(req.query.page)  || 1);
@@ -215,16 +169,6 @@ const getUserBookings = asyncHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-//  4. getWorkerBookings
-//     GET /api/bookings/worker-bookings
-//     Returns all bookings assigned to the logged-in worker,
-//     newest first with optional status filter.
-//
-//     Query params:
-//       status — filter by a specific status value
-//       page / limit
-// ============================================================
 const getWorkerBookings = asyncHandler(async (req, res) => {
   const { status } = req.query;
   const page       = Math.max(1, parseInt(req.query.page)  || 1);
@@ -259,13 +203,6 @@ const getWorkerBookings = asyncHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-//  5. updateBookingStatus
-//     PATCH /api/bookings/:id/status
-//     Worker updates the booking's status through its lifecycle.
-//     Valid transitions are enforced via WORKER_ALLOWED_TRANSITIONS.
-//     A notification is sent to the customer on every change.
-// ============================================================
 const updateBookingStatus = asyncHandler(async (req, res) => {
   const { status } = req.body;
 
@@ -285,13 +222,11 @@ const updateBookingStatus = asyncHandler(async (req, res) => {
     throw new Error("Booking not found.");
   }
 
-  // --- Only the assigned worker may update status ---
   if (booking.worker.toString() !== req.user.id) {
     res.status(403);
     throw new Error("Only the assigned worker can update this booking's status.");
   }
 
-  // --- Enforce allowed state transitions ---
   const allowedNext = WORKER_ALLOWED_TRANSITIONS[booking.status];
   if (!allowedNext.includes(status)) {
     res.status(400);
@@ -303,14 +238,12 @@ const updateBookingStatus = asyncHandler(async (req, res) => {
 
   booking.status = status;
 
-  // Record completion timestamp
   if (status === BOOKING_STATUS.COMPLETED) {
     booking.completedAt = new Date();
   }
 
   await booking.save();
 
-  // --- Notify customer ---
   const statusMessages = {
     [BOOKING_STATUS.ACCEPTED]:    "Your booking has been accepted by the worker.",
     [BOOKING_STATUS.IN_PROGRESS]: "Work on your booking has started.",
@@ -335,13 +268,6 @@ const updateBookingStatus = asyncHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-//  6. cancelBooking
-//     PATCH /api/bookings/:id/cancel
-//     Authenticated user cancels their own booking.
-//     Only bookings in "Pending" status may be cancelled.
-//     A notification is sent to the worker.
-// ============================================================
 const cancelBooking = asyncHandler(async (req, res) => {
   const booking = await Booking.findById(req.params.id);
 
@@ -350,13 +276,12 @@ const cancelBooking = asyncHandler(async (req, res) => {
     throw new Error("Booking not found.");
   }
 
-  // --- Only the booking owner may cancel ---
+ 
   if (booking.user.toString() !== req.user.id) {
     res.status(403);
     throw new Error("You are not authorized to cancel this booking.");
   }
 
-  // --- Only Pending bookings can be cancelled by customer ---
   if (booking.status !== BOOKING_STATUS.PENDING) {
     res.status(400);
     throw new Error(
@@ -372,7 +297,6 @@ const cancelBooking = asyncHandler(async (req, res) => {
 
   await booking.save();
 
-  // --- Notify worker ---
   await createNotification({
     recipient:      booking.worker,
     recipientModel: "Worker",
@@ -392,14 +316,6 @@ const cancelBooking = asyncHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-//  7. emergencyBooking
-//     POST /api/bookings/emergency
-//     Creates a highest-priority booking with emergencyRequest=true.
-//     Skips the duplicate-booking guard so customers can reach
-//     any available worker immediately.
-//     Notifies the worker with an URGENT flag.
-// ============================================================
 const emergencyBooking = asyncHandler(async (req, res) => {
   const {
     workerId,
@@ -409,13 +325,11 @@ const emergencyBooking = asyncHandler(async (req, res) => {
     totalAmount,
   } = req.body;
 
-  // --- Validate required fields ---
   if (!workerId || !serviceType || !address) {
     res.status(400);
     throw new Error("workerId, serviceType, and address are required for an emergency booking.");
   }
 
-  // --- Verify worker exists and is available ---
   const worker = await Worker.findById(workerId);
   if (!worker) {
     res.status(404);
@@ -430,20 +344,18 @@ const emergencyBooking = asyncHandler(async (req, res) => {
     throw new Error("This worker is currently unavailable. Please choose another worker for the emergency.");
   }
 
-  // --- Create emergency booking (bookingDate = now) ---
   const booking = await Booking.create({
     user:             req.user.id,
     worker:           workerId,
     serviceType:      serviceType.trim(),
-    bookingDate:      new Date(),          // immediate — right now
+    bookingDate:      new Date(),         
     address,
     description:      description || "EMERGENCY — Immediate assistance required.",
-    emergencyRequest: true,                // ← highest priority flag
+    emergencyRequest: true,                
     status:           BOOKING_STATUS.PENDING,
     totalAmount:      totalAmount || worker.serviceCharges || 0,
   });
 
-  // --- Notify worker with URGENT title ---
   await createNotification({
     recipient:      workerId,
     recipientModel: "Worker",
@@ -461,9 +373,6 @@ const emergencyBooking = asyncHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-//  Exports
-// ============================================================
 module.exports = {
   createBooking,
   getBookingDetails,
