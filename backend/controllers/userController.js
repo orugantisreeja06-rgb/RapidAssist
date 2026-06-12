@@ -13,13 +13,14 @@ const Worker       = require("../models/Worker");
 //  Shared populate config
 // ─────────────────────────────────────────────
 const POPULATE_SAVED_WORKER = {
-  path:   "savedWorkers",
-  select: "name email phone skills serviceCharges location averageRating totalReviews profileImage availability isVerified",
+  path: "savedWorkers",
+  select:
+    "name email phone skills serviceCharges location averageRating totalReviews profileImage availability",
 };
 
 const POPULATE_BOOKING_WORKER = {
-  path:   "worker",
-  select: "name email phone skills serviceCharges location averageRating profileImage",
+  path: "worker",
+  select: "name email phone skills serviceCharges location averageRating profileImage availability",
 };
 
 // ============================================================
@@ -150,10 +151,6 @@ const saveWorker = asyncHandler(async (req, res) => {
   if (!worker) {
     res.status(404);
     throw new Error("Worker not found.");
-  }
-  if (!worker.isVerified) {
-    res.status(400);
-    throw new Error("Only verified workers can be saved to favourites.");
   }
 
   const user = await User.findById(req.user.id);

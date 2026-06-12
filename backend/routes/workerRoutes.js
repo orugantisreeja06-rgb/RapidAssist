@@ -53,15 +53,15 @@ router.get("/:id", getWorkerProfile);
 // @access  Private (worker)
 router.post("/", protect, createWorkerProfile);
 
-// @route   PUT /api/workers/:id
-// @desc    Update worker profile
-// @access  Private (worker)
-router.put("/:id", protect, updateWorkerProfile);
-
 // @route   PUT /api/workers/availability
 // @desc    Toggle or set worker availability status
 // @access  Private (worker)
 router.put("/availability", protect, updateAvailability);
+
+// @route   PUT /api/workers/:id
+// @desc    Update worker profile
+// @access  Private (worker)
+router.put("/:id", protect, updateWorkerProfile);
 
 // ─────────────────────────────────────────────
 //  Protected — Admin Only Routes

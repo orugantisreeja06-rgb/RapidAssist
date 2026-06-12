@@ -2,7 +2,10 @@ const jwt = require("jsonwebtoken");
 
 const authMiddleware = (req, res, next) => {
     try {
-        const token = req.header("Authorization");
+        const authHeader = req.header("Authorization");
+        const token = authHeader?.startsWith("Bearer ")
+            ? authHeader.split(" ")[1]
+            : authHeader;
 
         if (!token) {
             return res.status(401).json({
@@ -25,4 +28,15 @@ const authMiddleware = (req, res, next) => {
     }
 };
 
-module.exports = authMiddleware;
+const adminOnly = (req, res, next) => {
+  // expects JWT payload to include role
+  if (!req.user || req.user.role !== "admin") {
+    return res.status(403).json({
+      success: false,
+      message: "Access Forbidden",
+    });
+  }
+  next();
+};
+
+module.exports = { protect: authMiddleware, adminOnly };

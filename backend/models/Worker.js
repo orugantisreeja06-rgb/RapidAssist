@@ -1,71 +1,130 @@
 const mongoose = require("mongoose");
 
 const workerSchema = new mongoose.Schema(
-{
-    name:{
-        type:String,
-        required:true
+  {
+    name: {
+      type: String,
+      required: true,
+      trim: true,
     },
-
-    email:{
-        type:String,
-        required:true,
-        unique:true
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
     },
-
-    phone:{
-        type:String,
-        required:true
+    phone: {
+      type: String,
+      required: true,
+      trim: true,
     },
-
-    password:{
-        type:String,
-        required:true
+    password: {
+      type: String,
+      required: true,
     },
-
-    skill:{
-        type:String,
-        required:true
+    role: {
+      type: String,
+      enum: ["worker"],
+      default: "worker",
     },
-
-    experience:{
-        type:Number,
-        default:0
+    bio: {
+      type: String,
+      trim: true,
+      default: "",
     },
-
-    serviceCharge:{
-        type:Number,
-        required:true
+    skills: {
+      type: [String],
+      required: true,
+      validate: {
+        validator: (value) => Array.isArray(value) && value.length > 0,
+        message: "At least one skill is required.",
+      },
     },
-
-    availability:{
-        type:Boolean,
-        default:true
+    experience: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
-
-    location:{
-        address:String,
-        latitude:Number,
-        longitude:Number
+    serviceCharges: {
+      type: Number,
+      required: true,
+      min: 0,
     },
-
-    rating:{
-        type:Number,
-        default:0
+    availability: {
+      type: Boolean,
+      default: true,
     },
-
-    totalReviews:{
-        type:Number,
-        default:0
+    location: {
+      address: String,
+      city: String,
+      state: String,
+      pincode: String,
+      coordinates: {
+        lat: Number,
+        lng: Number,
+      },
     },
-
-    profileImage:{
-        type:String
-    }
-},
-{
-    timestamps:true
-}
+    averageRating: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 5,
+    },
+    totalReviews: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    profileImage: {
+      type: String,
+      default: "",
+    },
+    idProof: {
+      type: String,
+      default: "",
+    },
+    certifications: {
+      type: [String],
+      default: [],
+    },
+    profileComplete: {
+      type: Boolean,
+      default: true,
+    },
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+    verifiedAt: Date,
+    verifiedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    verificationNote: {
+      type: String,
+      default: "",
+    },
+    resetPasswordToken: String,
+    resetPasswordExpire: Date,
+  },
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
 );
 
-module.exports = mongoose.model("Worker",workerSchema);
+workerSchema.virtual("skill").get(function () {
+  return this.skills?.[0] || "";
+});
+
+workerSchema.virtual("serviceCharge").get(function () {
+  return this.serviceCharges;
+});
+
+workerSchema.virtual("rating").get(function () {
+  return this.averageRating;
+});
+
+module.exports = mongoose.model("Worker", workerSchema);
