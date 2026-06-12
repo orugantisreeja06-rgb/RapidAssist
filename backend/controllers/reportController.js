@@ -1,7 +1,3 @@
-// ============================================================
-//  Worker Connect — reportController.js
-//  Analytics and reporting endpoints — all admin-only
-// ============================================================
 
 const asyncHandler = require("express-async-handler");
 const User         = require("../models/User");
@@ -10,9 +6,6 @@ const Booking      = require("../models/Booking");
 const Review       = require("../models/Review");
 const Complaint    = require("../models/Complaint");
 
-// ─────────────────────────────────────────────
-//  Helper: first day of current calendar month
-// ─────────────────────────────────────────────
 const startOfCurrentMonth = () => {
   const d = new Date();
   d.setDate(1);
@@ -20,9 +13,6 @@ const startOfCurrentMonth = () => {
   return d;
 };
 
-// ─────────────────────────────────────────────
-//  Helper: first day N months ago (inclusive)
-// ─────────────────────────────────────────────
 const monthsAgo = (n) => {
   const d = new Date();
   d.setMonth(d.getMonth() - (n - 1));
@@ -31,20 +21,11 @@ const monthsAgo = (n) => {
   return d;
 };
 
-// ─────────────────────────────────────────────
-//  Helper: map numeric month → short name
-// ─────────────────────────────────────────────
 const MONTH_NAMES = [
   "", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
-// ============================================================
-//  1. getMostBookedServices
-//     GET /api/reports/most-booked-services
-//     Aggregates bookings by serviceType and returns the top 10
-//     categories sorted by booking volume descending.
-// ============================================================
 const getMostBookedServices = asyncHandler(async (req, res) => {
   const services = await Booking.aggregate([
     {
@@ -88,13 +69,6 @@ const getMostBookedServices = asyncHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-//  2. getTopRatedWorkers
-//     GET /api/reports/top-rated-workers
-//     Returns the top 10 verified workers sorted by average
-//     rating descending, then by total reviews descending as
-//     a tiebreaker. Only workers with at least 1 review qualify.
-// ============================================================
 const getTopRatedWorkers = asyncHandler(async (req, res) => {
   const workers = await Worker.find({
     isVerified:   true,
@@ -113,12 +87,6 @@ const getTopRatedWorkers = asyncHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-//  3. getComplaintStatistics
-//     GET /api/reports/complaint-statistics
-//     Returns a breakdown of complaints by status plus the
-//     most frequent complaint types and resolution rate.
-// ============================================================
 const getComplaintStatistics = asyncHandler(async (req, res) => {
   const [statusBreakdown, typeBreakdown, totalComplaints] = await Promise.all([
 
@@ -166,12 +134,6 @@ const getComplaintStatistics = asyncHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-//  4. getUserActivityReport
-//     GET /api/reports/user-activity
-//     Counts total users, users who have made at least one
-//     booking (active), and new registrations this month.
-// ============================================================
 const getUserActivityReport = asyncHandler(async (req, res) => {
   const monthStart = startOfCurrentMonth();
 
@@ -200,12 +162,6 @@ const getUserActivityReport = asyncHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-//  5. getBookingAnalytics
-//     GET /api/reports/booking-analytics
-//     Returns a full status breakdown of all bookings plus
-//     emergency booking count and completion/cancellation rates.
-// ============================================================
 const getBookingAnalytics = asyncHandler(async (req, res) => {
   const [statusBreakdown, totalBookings, emergencyCount] = await Promise.all([
 
@@ -268,16 +224,6 @@ const getBookingAnalytics = asyncHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-//  6. getMonthlyBookingReport
-//     GET /api/reports/monthly-bookings
-//     Groups bookings by year + month for the last N months
-//     and returns count, completed count, and revenue per month.
-//     Results are sorted chronologically.
-//
-//     Query params:
-//       months — look-back window (default 12, max 24)
-// ============================================================
 const getMonthlyBookingReport = asyncHandler(async (req, res) => {
   const monthCount = Math.min(24, parseInt(req.query.months) || 12);
   const since      = monthsAgo(monthCount);
@@ -312,7 +258,6 @@ const getMonthlyBookingReport = asyncHandler(async (req, res) => {
     },
   ]);
 
-  // Attach human-readable month labels in JS
   const result = monthly.map((m) => ({
     ...m,
     monthName: MONTH_NAMES[m.month] || "",
@@ -327,19 +272,11 @@ const getMonthlyBookingReport = asyncHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-//  7. getRevenueReport
-//     GET /api/reports/revenue
-//     Calculates total platform revenue from completed bookings,
-//     monthly breakdown (last 12 months), and top revenue-
-//     generating service types.
-// ============================================================
 const getRevenueReport = asyncHandler(async (req, res) => {
   const since = monthsAgo(12);
 
   const [totalRevenueAgg, monthlyRevenue, revenueByService] = await Promise.all([
 
-    // All-time revenue stats
     Booking.aggregate([
       { $match: { status: "Completed" } },
       {
@@ -354,7 +291,6 @@ const getRevenueReport = asyncHandler(async (req, res) => {
       },
     ]),
 
-    // Monthly revenue — last 12 months
     Booking.aggregate([
       { $match: { status: "Completed", createdAt: { $gte: since } } },
       {
@@ -379,7 +315,6 @@ const getRevenueReport = asyncHandler(async (req, res) => {
       },
     ]),
 
-    // Revenue by service type (top 10)
     Booking.aggregate([
       { $match: { status: "Completed" } },
       {
@@ -433,12 +368,6 @@ const getRevenueReport = asyncHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-//  8. getDashboardReport
-//     GET /api/reports/dashboard
-//     Single combined endpoint for the admin dashboard.
-//     Runs all queries concurrently via Promise.all.
-// ============================================================
 const getDashboardReport = asyncHandler(async (req, res) => {
   const monthStart = startOfCurrentMonth();
 
@@ -492,7 +421,6 @@ const getDashboardReport = asyncHandler(async (req, res) => {
       { $project: { _id: 0, serviceType: "$_id", count: 1 } },
     ]),
 
-    // 6-month booking + revenue trend
     Booking.aggregate([
       { $match: { createdAt: { $gte: monthsAgo(6) } } },
       {
@@ -563,9 +491,6 @@ const getDashboardReport = asyncHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-//  Exports
-// ============================================================
 module.exports = {
   getMostBookedServices,
   getTopRatedWorkers,
