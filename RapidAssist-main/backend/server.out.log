@@ -1,0 +1,4 @@
+◇ injected env (3) from .env // tip: ⌘ enable debugging { debug: true }
+Server running on port 3000
+Environment: development
+MongoDB Connected Successfully
