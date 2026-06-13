@@ -1,0 +1,55 @@
+@import 'tailwindcss';
+@import 'leaflet/dist/leaflet.css';
+
+:root {
+  color-scheme: dark;
+  --font-body: 'Plus Jakarta Sans', sans-serif;
+  --font-display: 'Space Grotesk', sans-serif;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+@theme {
+  --font-sans: var(--font-body);
+  --font-display: var(--font-display);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  background: #020617;
+  color: #e2e8f0;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: rgba(14, 165, 233, 0.35);
+  color: white;
+}
+
+.leaflet-container {
+  z-index: 1;
+}
+
+.leaflet-control-attribution,
+.leaflet-control-zoom {
+  border: 0 !important;
+}
+
+.leaflet-div-icon {
+  background: transparent;
+  border: 0;
+}
